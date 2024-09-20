@@ -1,132 +1,133 @@
+// main.js
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import CSG from './libs/csg/three-csg.js';
 
-// Crear el LoadingManager
-const loadingManager = new THREE.LoadingManager();
+// Crear la escena
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xfefefe);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.z = 3;
 
-loadingManager.onStart = function (url, itemsLoaded, itemsTotal) {
-    document.getElementById('loading-screen').style.display = 'flex';
-};
-
-loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
-    const progress = (itemsLoaded / itemsTotal) * 100;
-    document.getElementById('loading-bar-progress').style.width = progress + '%';
-};
-
-loadingManager.onLoad = function () {
-    document.getElementById('loading-screen').style.display = 'none';
-};
-
-loadingManager.onError = function (url) {
-    console.error('Error al cargar ' + url);
-};
-
-// Escena
-const sceneOne = new THREE.Scene();
-sceneOne.background = new THREE.Color(0xfefefe);  // Fondo blanco
-
-// Cámara
-const cameraOne = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-cameraOne.position.set(0, 5, 20);  // Ajustar la posición de la cámara para ver mejor el cubo desde lejos
-
-const directionalLightOne = new THREE.DirectionalLight(0xffffff, 1);
-directionalLightOne.position.set(10, 10, 10);
-sceneOne.add(directionalLightOne);
-
-// Renderizador
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Crear un elemento de video en HTML
-const video = document.createElement('video');
-video.src = 'videos/small.mp4';  // Asegúrate de que la ruta sea correcta
-video.muted = true;  // Opcional: silenciar el video
-video.loop = true;  // Hacer que el video se repita
-video.play();  // Iniciar el video
+// Crear un cubo
+const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+const cubeCrystalClearGeometry = new THREE.BoxGeometry(2, 2, 2);
+const material = new THREE.MeshNormalMaterial();
+const crystalClearMaterial = new THREE.MeshPhysicalMaterial({
+    metalness: 0,  
+    roughness: 0.1,
+    transmission: 1, // Add transparency
+    transparent: true,
+    thickness: 0.1, // Add refraction
+    reflectivity: 1,
+    ior: 1.3,
+    side: THREE.DoubleSide,
 
-// Crear la textura del video
-const videoTexture = new THREE.VideoTexture(video);
+});
+const backFaceMaterial = new THREE.MeshPhysicalMaterial({
+    metalness: 1,  
+    roughness: 1,
+    transmission: 0,
+    transparent: false
+}); // Material para la cara del fondo
+// Crear un array de materiales, con el material cristalino para todas las caras excepto la trasera
+const materialsArray = [
+    crystalClearMaterial, // Cara 1
+    crystalClearMaterial, // Cara 2
+    crystalClearMaterial, // Cara 3
+    crystalClearMaterial, // Cara 4
+    crystalClearMaterial, // Cara 5
+    backFaceMaterial      // Cara 6 (trasera)
+];
+const cube = new THREE.Mesh(cubeGeometry, material);
+const cubeCrystalClear = new THREE.Mesh(cubeCrystalClearGeometry, materialsArray);
+cube.position.set(0, 0, 0);
+cubeCrystalClear.position.set(0,0,0);
 
-// Crear el cargador GLTF
-const gltfLoader = new GLTFLoader(loadingManager);
+// Crear una esfera que será restada del cubo
+const sphereGeometry = new THREE.SphereGeometry(0.75, 32, 32);
+const smallerSphereGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+const sphere = new THREE.Mesh(sphereGeometry, material);
+const smallerSphere = new THREE.Mesh(smallerSphereGeometry, material);
+sphere.position.set(0.5, 0.5, 0.5);  // Ajustar la posición para que interseque con el cubo
+smallerSphere.position.set(0, 0, 0);  // Ajustar la posición para que interseque con el cubo
 
-// Definir la variable 'cube' de manera global
-let cube;
+const planeGeometry = new THREE.PlaneGeometry(10, 3);
+const planeMaterial = new THREE.MeshNormalMaterial();
+const planeOne = new THREE.Mesh(planeGeometry, planeMaterial);
+planeOne.position.set(0, 0, -10);
+scene.add(planeOne);
 
-// Cargar el archivo GLTF desde la subcarpeta 'models'
-gltfLoader.load(
-    'models/cube.gltf',  // Ruta a tu archivo GLTF
-    function (gltf) {
-        cube = gltf.scene;
+// Añadir las geometrías a la escena (para visualización antes del corte)
+scene.add(cube);
+scene.add(sphere);
+scene.add(smallerSphere);
+scene.add(cubeCrystalClear);
 
-        // Recorrer todos los nodos del modelo y verificar si tiene mallas y materiales
-        cube.traverse((child) => {
-            if (child.isMesh) {
-                
-                // Aplicar la textura del video a la cara frontal (supongamos que es la primera cara)
-                const videoMaterial = new THREE.MeshBasicMaterial({ map: videoTexture });
-                
-                // Si el material es un array, entonces hay varias caras
-                if (Array.isArray(child.material)) {
-                    child.material[0] = videoMaterial;  // Aplica la textura de video a la cara frontal (índice 0)
-                } else {
-                    // Si es un solo material, lo reemplazamos por el material de video
-                    child.material = videoMaterial;
-                }
-            }
-        });
+// Crear las representaciones CSG
+const cubeCSG = CSG.fromMesh(cube);
+const sphereCSG = CSG.fromMesh(sphere);
+const smallerSphereCSG = CSG.fromMesh(smallerSphere);
 
-        // Escala del cubo
-        cube.scale.set(1, 1, 1);  // Ajustar la escala según sea necesario
+// Realizar la operación de sustracción
+const firstSubtractedCSG = cubeCSG.subtract(smallerSphereCSG);
+const secondSubtractedCSG = cubeCSG.subtract(sphereCSG);
 
-        // Centrar el cubo en la escena
-        cube.position.set(0, 0, 0);
+// Convertir el resultado de vuelta a una malla de Three.js
+const resultMesh = CSG.toMesh(secondSubtractedCSG, new THREE.Matrix4(), material);
 
-        // Añadir el cubo a la escena
-        sceneOne.add(cube);
-
-        // Mostrar en la consola la estructura completa del modelo
-        console.log("Estructura del modelo GLTF:", gltf);
-    },
-    function (xhr) {
-        console.log((xhr.loaded / xhr.total * 100) + '% cargado');
-    },
-    function (error) {
-        console.error('Error al cargar el modelo GLTF', error);
-    }
-);
+// Limpiar la escena y añadir la malla resultante
+scene.remove(cube);
+scene.remove(sphere);
+scene.add(resultMesh);
 
 // Iluminación
 const ambientLight = new THREE.AmbientLight(0xfefefe, 0.5);  // Luz ambiental
-sceneOne.add(ambientLight);
+scene.add(ambientLight);
 
-const pointLight = new THREE.PointLight(0xfefefe, 1);
-pointLight.position.set(5, 5, 5);
-sceneOne.add(pointLight);
+const pointLightOne = new THREE.PointLight(0xdde3e6, 1);
+const pointLightTwo = new THREE.PointLight(0xdde3e6, 1);
+const pointLightThree = new THREE.PointLight(0xdde3e6, 1);
+pointLightOne.position.set(-5, 5, 5);
+pointLightTwo.position.set(0, 5, 5);
+pointLightThree.position.set(5, 5, 5);
+scene.add(pointLightOne);
+scene.add(pointLightTwo);
+scene.add(pointLightThree);
 
-// Controles de la cámara
-const controls = new OrbitControls(cameraOne, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.1;
+let target = new THREE.Vector3();
+let mouseX = 0, mouseY = 0; // Usamos let porque los valores se actualizarán
+let speed = 0.2; // 0.02
 
-// Animación
-function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
+const windowHalfX = window.innerWidth / 2; // Usamos const porque este valor no cambiará
+const windowHalfY = window.innerHeight / 2;
 
-    renderer.render(sceneOne, cameraOne);
+// Listen for mouse movement
+document.addEventListener('mousemove', onDocumentMouseMove, false);
+
+function onDocumentMouseMove(event) {
+    mouseX = (event.clientX - windowHalfX) / windowHalfX;
+    mouseY = (event.clientY - windowHalfY) / windowHalfY;
 }
 
-// Ajuste de la ventana
-window.addEventListener('resize', () => {
-    cameraOne.aspect = window.innerWidth / window.innerHeight;
-    cameraOne.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
+// Renderizado
+function animate() {
+    requestAnimationFrame(animate);
 
-document.getElementById('loading-screen').style.display = 'flex';
+    resultMesh.rotation.x += 0.01;
+    resultMesh.rotation.y += 0.01;
 
-// Iniciar la animación
+    // Update target position based on mouse
+    target.x += (mouseX - target.x) * speed;
+    target.y += (-mouseY - target.y) * speed;
+    target.z = camera.position.z; // Keep the Z consistent with the camera position
+
+    // Make the object look at the target
+    cubeCrystalClear.lookAt(target);
+
+    renderer.render(scene, camera);
+}
 animate();
