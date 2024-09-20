@@ -12,9 +12,40 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+
+// Crear un video como textura
+const video = document.createElement('video');
+video.src = 'videos/small.mp4';  // Asegúrate de proporcionar la ruta correcta a tu video
+video.load();
+video.muted = true;
+video.addEventListener('canplay', () => {
+    video.play();
+});
+
+const videoTexture = new THREE.VideoTexture(video);
+videoTexture.wrapS = THREE.ClampToEdgeWrapping;
+videoTexture.wrapT = THREE.ClampToEdgeWrapping;
+videoTexture.minFilter = THREE.LinearFilter;
+videoTexture.magFilter = THREE.LinearFilter;
+videoTexture.format = THREE.RGBFormat;
+
+// Crear un material que use la textura de video
+const videoMaterial = new THREE.MeshBasicMaterial({
+    map: videoTexture,
+    side: THREE.DoubleSide // Para que el video sea visible desde ambos lados del plano
+});
+
+
 // Crear un cubo
 const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
 const cubeCrystalClearGeometry = new THREE.BoxGeometry(2, 2, 2);
+// Crear un CubeCamera para las reflexiones
+const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+    format: THREE.RGBFormat,
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter
+});
+const cubeCamera = new THREE.CubeCamera(0.1, 10, cubeRenderTarget);
 const material = new THREE.MeshNormalMaterial();
 const crystalClearMaterial = new THREE.MeshPhysicalMaterial({
     metalness: 0,  
@@ -27,6 +58,21 @@ const crystalClearMaterial = new THREE.MeshPhysicalMaterial({
     side: THREE.DoubleSide,
 
 });
+const crystalSideMaterial = new THREE.MeshPhysicalMaterial({
+    envMap: cubeRenderTarget.texture, 
+    envMapIntensity: 1,
+    metalness: 0.1,  
+    roughness: 0.1,
+    transmission: 0.9, // Add transparency
+    thickness: 0, // Add refraction
+    reflectivity: 0.9,
+    refractionRatio: 0.1, // Efecto de refracción
+    ior: 1.3,
+    sheen: 1, // Simular efectos de dispersión de luz
+    sheenColor: new THREE.Color(0xff0000), // Efecto prismático con un color inicial
+    side: THREE.DoubleSide,
+
+});
 const backFaceMaterial = new THREE.MeshPhysicalMaterial({
     metalness: 1,  
     roughness: 1,
@@ -35,10 +81,10 @@ const backFaceMaterial = new THREE.MeshPhysicalMaterial({
 }); // Material para la cara del fondo
 // Crear un array de materiales, con el material cristalino para todas las caras excepto la trasera
 const materialsArray = [
-    crystalClearMaterial, // Cara 1
-    crystalClearMaterial, // Cara 2
-    crystalClearMaterial, // Cara 3
-    crystalClearMaterial, // Cara 4
+    crystalSideMaterial, // Cara 1
+    crystalSideMaterial, // Cara 2
+    crystalSideMaterial, // Cara 3
+    crystalSideMaterial, // Cara 4
     crystalClearMaterial, // Cara 5
     backFaceMaterial      // Cara 6 (trasera)
 ];
@@ -55,17 +101,27 @@ const smallerSphere = new THREE.Mesh(smallerSphereGeometry, material);
 sphere.position.set(0.5, 0.5, 0.5);  // Ajustar la posición para que interseque con el cubo
 smallerSphere.position.set(0, 0, 0);  // Ajustar la posición para que interseque con el cubo
 
-const planeGeometry = new THREE.PlaneGeometry(10, 3);
+const planeGeometry = new THREE.PlaneGeometry(2, 2);
 const planeMaterial = new THREE.MeshNormalMaterial();
-const planeOne = new THREE.Mesh(planeGeometry, planeMaterial);
-planeOne.position.set(0, 0, -10);
-scene.add(planeOne);
+const planeOne = new THREE.Mesh(planeGeometry, videoMaterial);
+
+
+// Crear el grupo para contener el cubo y el plano
+const cubeGroup = new THREE.Group();
+
+// Añadir el cubo y el plano al grupo
+cubeGroup.add(cubeCrystalClear);
+cubeGroup.add(planeOne);
+
+// Ajustar la posición del plano para que esté en la cara trasera del cubo
+planeOne.position.set(0, 0, -1);  // Ajusta la posición Z para que coincida con la cara trasera del cubo
+
 
 // Añadir las geometrías a la escena (para visualización antes del corte)
-scene.add(cube);
-scene.add(sphere);
-scene.add(smallerSphere);
-scene.add(cubeCrystalClear);
+//scene.add(cube);
+//scene.add(sphere);
+//scene.add(smallerSphere);
+scene.add(cubeGroup);
 
 // Crear las representaciones CSG
 const cubeCSG = CSG.fromMesh(cube);
@@ -80,9 +136,9 @@ const secondSubtractedCSG = cubeCSG.subtract(sphereCSG);
 const resultMesh = CSG.toMesh(secondSubtractedCSG, new THREE.Matrix4(), material);
 
 // Limpiar la escena y añadir la malla resultante
-scene.remove(cube);
-scene.remove(sphere);
-scene.add(resultMesh);
+// scene.remove(cube);
+// scene.remove(sphere);
+// scene.add(resultMesh);
 
 // Iluminación
 const ambientLight = new THREE.AmbientLight(0xfefefe, 0.5);  // Luz ambiental
@@ -126,7 +182,12 @@ function animate() {
     target.z = camera.position.z; // Keep the Z consistent with the camera position
 
     // Make the object look at the target
-    cubeCrystalClear.lookAt(target);
+    cubeGroup.lookAt(target);
+
+    cubeCrystalClear.visible = false;  // Hacer invisible el cubo para evitar reflejos de sí mismo
+    cubeCamera.position.copy(cubeCrystalClear.position);
+    cubeCamera.update(renderer, scene);
+    cubeCrystalClear.visible = true;  // Volver a hacerlo visible
 
     renderer.render(scene, camera);
 }
