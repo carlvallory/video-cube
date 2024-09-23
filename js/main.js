@@ -1,6 +1,8 @@
 // main.js
 import * as THREE from 'three';
 import CSG from './libs/csg/three-csg.js';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';   // Para EXR
+
 
 // Crear la escena
 const scene = new THREE.Scene();
@@ -8,10 +10,42 @@ scene.background = new THREE.Color(0xfefefe);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 3;
 
+const exrLoader = new EXRLoader();
+exrLoader.load('hdr/river_walk_1_4k.exr', function (texture) {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    
+    // Establecer la textura de entorno para la escena
+    scene.environment = texture;
+    scene.background = texture;
+
+    // También puedes aplicarlo como un mapa de entorno en el cubo cristalino para reflejos
+    crystalSideMaterial.envMap = texture;
+    crystalSideMaterial.needsUpdate = true;
+});
+
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// Supongamos que ya tienes la funcionalidad básica del cubo con el video y el renderizado
+// Crear botones de "Next" y "Prev"
+const nextButton = document.createElement('button');
+nextButton.innerText = 'Next';
+nextButton.style.position = 'absolute';
+nextButton.style.top = '20px';
+nextButton.style.right = '20px';
+document.body.appendChild(nextButton);
+
+const prevButton = document.createElement('button');
+prevButton.innerText = 'Prev';
+prevButton.style.position = 'absolute';
+prevButton.style.top = '20px';
+prevButton.style.right = '60px';
+document.body.appendChild(prevButton);
+
+// Lista de videos
+const videos = ['videos/small.mp4', 'videos/small2.mp4', 'videos/small3.mp4'];
+let currentVideoIndex = 0;
 
 // Crear un video como textura
 const video = document.createElement('video');
@@ -35,6 +69,9 @@ const videoMaterial = new THREE.MeshBasicMaterial({
     side: THREE.DoubleSide // Para que el video sea visible desde ambos lados del plano
 });
 
+
+const loader = new THREE.TextureLoader();
+const texture = loader.load('hdr/brown_photostudio_04_4k.exr');
 
 // Crear un cubo
 const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -61,16 +98,17 @@ const crystalClearMaterial = new THREE.MeshPhysicalMaterial({
 const crystalSideMaterial = new THREE.MeshPhysicalMaterial({
     envMap: cubeRenderTarget.texture, 
     envMapIntensity: 1,
-    metalness: 0.1,  
+    metalness: 0.2,  
     roughness: 0.1,
     transmission: 0.9, // Add transparency
     thickness: 0, // Add refraction
-    reflectivity: 0.9,
-    refractionRatio: 0.1, // Efecto de refracción
+    reflectivity: 1,
+    refractionRatio: 0.98, // Efecto de refracción
     ior: 1.3,
     sheen: 1, // Simular efectos de dispersión de luz
-    sheenColor: new THREE.Color(0xff0000), // Efecto prismático con un color inicial
+    sheenColor: new THREE.Color(0x0000ff), // Efecto prismático con un color inicial
     side: THREE.DoubleSide,
+    lightMapIntensity: 1,
 
 });
 const backFaceMaterial = new THREE.MeshPhysicalMaterial({
@@ -161,6 +199,71 @@ let speed = 0.2; // 0.02
 const windowHalfX = window.innerWidth / 2; // Usamos const porque este valor no cambiará
 const windowHalfY = window.innerHeight / 2;
 
+// Cargar video
+function loadVideo(videoSrc) {
+    video.src = videoSrc;
+    video.load();
+    video.play();
+}
+
+// Girar el cubo suavemente
+function rotateCube(direction) {
+    const rotationAngle = Math.PI / 2; // Girar 90 grados
+    const duration = 500; // Duración de la rotación en milisegundos
+    const startRotation = cube.rotation.y;
+    const endRotation = direction === 'next' ? startRotation + rotationAngle : startRotation - rotationAngle;
+
+    let startTime = null;
+    function rotate(time) {
+        if (!startTime) startTime = time;
+        const elapsed = time - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        cube.rotation.y = startRotation + progress * (endRotation - startRotation);
+
+        if (progress < 1) {
+            requestAnimationFrame(rotate);
+        }
+    }
+    requestAnimationFrame(rotate);
+}
+
+// Buttons
+nextButton.addEventListener('click', () => {
+    currentVideoIndex = (currentVideoIndex + 1) % videos.length; // Cambiar al siguiente video
+    loadVideo(videos[currentVideoIndex]);
+    rotateCube('next');
+});
+
+prevButton.addEventListener('click', () => {
+    currentVideoIndex = (currentVideoIndex - 1 + videos.length) % videos.length; // Cambiar al video anterior
+    loadVideo(videos[currentVideoIndex]);
+    rotateCube('prev');
+});
+
+// Manejar clic en el cubo para pantalla completa
+cubeGroup.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        video.requestFullscreen().catch(err => {
+            console.error(`Error al intentar poner en pantalla completa: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+});
+
+// Alternar entre full-screen y tamaño regular
+document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) {
+        // Aquí puedes hacer cualquier ajuste cuando el video esté en pantalla completa
+        video.style.width = '100vw'; // Ajustar el tamaño del video
+        video.style.height = '100vh';
+    } else {
+        // Regresar el video a su tamaño original dentro del cubo
+        video.style.width = '100%';
+        video.style.height = '100%';
+    }
+});
+
 // Listen for mouse movement
 document.addEventListener('mousemove', onDocumentMouseMove, false);
 
@@ -191,4 +294,5 @@ function animate() {
 
     renderer.render(scene, camera);
 }
+
 animate();
