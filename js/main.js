@@ -11,7 +11,7 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 camera.position.z = 3;
 
 const exrLoader = new EXRLoader();
-exrLoader.load('hdr/river_walk_1_4k.exr', function (texture) {
+exrLoader.load('hdr/shot-panoramic-composition-empty-interior-2.exr', function (texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     
     // Establecer la textura de entorno para la escena
@@ -26,6 +26,8 @@ exrLoader.load('hdr/river_walk_1_4k.exr', function (texture) {
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+const clock = new THREE.Clock();
 
 // Supongamos que ya tienes la funcionalidad básica del cubo con el video y el renderizado
 // Crear botones de "Next" y "Prev"
@@ -101,7 +103,7 @@ const crystalSideMaterial = new THREE.MeshPhysicalMaterial({
     metalness: 0.2,  
     roughness: 0.1,
     transmission: 0.9, // Add transparency
-    thickness: 0, // Add refraction
+    thickness: -1, // Add refraction
     reflectivity: 1,
     refractionRatio: 0.98, // Efecto de refracción
     ior: 1.3,
@@ -208,6 +210,9 @@ function loadVideo(videoSrc) {
 
 // Girar el cubo suavemente
 function rotateCube(direction) {
+    const elapsedTime = clock.getElapsedTime();
+    const rotationPI = elapsedTime * Math.PI * 2;
+
     const rotationAngle = Math.PI / 2; // Girar 90 grados
     const duration = 500; // Duración de la rotación en milisegundos
     const startRotation = cube.rotation.y;
@@ -218,7 +223,7 @@ function rotateCube(direction) {
         if (!startTime) startTime = time;
         const elapsed = time - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        cube.rotation.y = startRotation + progress * (endRotation - startRotation);
+        cube.rotation.y = startRotation + progress * (endRotation - startRotation); //rotationPI
 
         if (progress < 1) {
             requestAnimationFrame(rotate);
